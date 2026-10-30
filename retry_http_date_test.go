@@ -22,7 +22,7 @@ func TestGenerateText_HTTPDateRetryAfter(t *testing.T) {
 		w.Header().Set("Retry-After", deadline.Format(http.TimeFormat))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusTooManyRequests)
-		fmt.Fprint(w, `{"error":{"message":"rate limited"}}`)
+		_, _ = fmt.Fprint(w, `{"error":{"message":"rate limited"}}`)
 	}))
 	defer server.Close()
 	ctx, cancel := context.WithCancel(t.Context())
