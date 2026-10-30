@@ -90,6 +90,12 @@ func TestSchemaFrom_EmbeddedJSONTags(t *testing.T) {
 	type PrivateNamedPointer struct {
 		*privateTaggedSchemaFields `json:"nested"`
 	}
+	type InvalidName struct {
+		TaggedSchemaFields `json:"😀"`
+	}
+	type InvalidNamePointer struct {
+		*TaggedSchemaFields `json:"😀"`
+	}
 	type Plain struct{ TaggedSchemaFields }
 	for _, tt := range []struct {
 		name     string
@@ -107,6 +113,8 @@ func TestSchemaFrom_EmbeddedJSONTags(t *testing.T) {
 		{"literal hyphen with options", HyphenOptions{TaggedSchemaFields{"item"}}, SchemaFrom[HyphenOptions](), "-", false},
 		{"private named", PrivateNamed{privateTaggedSchemaFields{"item"}}, SchemaFrom[PrivateNamed](), "nested", false},
 		{"private named pointer", PrivateNamedPointer{&privateTaggedSchemaFields{"item"}}, SchemaFrom[PrivateNamedPointer](), "nested", true},
+		{"invalid name", InvalidName{TaggedSchemaFields{"item"}}, SchemaFrom[InvalidName](), "", false},
+		{"invalid name pointer", InvalidNamePointer{&TaggedSchemaFields{"item"}}, SchemaFrom[InvalidNamePointer](), "", false},
 		{"plain", Plain{TaggedSchemaFields{"item"}}, SchemaFrom[Plain](), "", false},
 	} {
 		t.Run(tt.name, func(t *testing.T) { checkEmbeddedSchemaKeys(t, tt.value, tt.raw, tt.nested, tt.nullable) })

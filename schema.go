@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // schemaMarshalFunc is swappable for testing the panic path.
@@ -178,6 +179,11 @@ func collectFields(t reflect.Type, properties map[string]any, required *[]string
 			continue
 		}
 		tagName, _, _ := strings.Cut(tag, ",")
+		if strings.ContainsFunc(tagName, func(r rune) bool {
+			return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("!#$%&()*+-./:;<=>?@[]^_{|}~ ", r)
+		}) {
+			tagName = ""
+		}
 
 		if anonymousStruct && tagName == "" {
 			if seen[ft] {
