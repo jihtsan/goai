@@ -11,15 +11,23 @@ import (
 	"time"
 )
 
+type endpointRoundTripper func(*http.Request) (*http.Response, error)
+
+func (fn endpointRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	return fn(request)
+}
+
 func TestSSETransport_ResolveEndpointAndSend(t *testing.T) {
 	for _, tt := range []struct {
-		name, endpoint, wantURI string
-		absolute, invalidFirst  bool
+		name, endpoint, wantURI                                  string
+		absolute, invalidFirst, redirect, missingResponseRequest bool
 	}{
 		{name: "root relative", endpoint: "/messages?session_id=a%2Fb", wantURI: "/messages?session_id=a%2Fb"},
 		{name: "path relative", endpoint: "messages?session_id=fixture", wantURI: "/nested/messages?session_id=fixture"},
 		{name: "parent relative", endpoint: "../messages?session_id=fixture", wantURI: "/messages?session_id=fixture"},
 		{name: "query relative", endpoint: "?session_id=fixture", wantURI: "/nested/sse?session_id=fixture"},
+		{name: "redirected SSE", endpoint: "messages?session_id=fixture", wantURI: "/nested/messages?session_id=fixture", redirect: true},
+		{name: "custom transport without response request", endpoint: "messages?session_id=fixture", wantURI: "/nested/messages?session_id=fixture", missingResponseRequest: true},
 		{name: "absolute", endpoint: "/absolute?session_id=fixture", wantURI: "/absolute?session_id=fixture", absolute: true},
 		{name: "invalid then valid", endpoint: "/messages?session_id=fixture", wantURI: "/messages?session_id=fixture", invalidFirst: true},
 	} {
@@ -31,6 +39,10 @@ func TestSSETransport_ResolveEndpointAndSend(t *testing.T) {
 			posted := make(chan request, 1)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method == http.MethodGet {
+					if tt.redirect && r.URL.Path == "/start" {
+						http.Redirect(w, r, "/nested/sse?original=1", http.StatusFound)
+						return
+					}
 					w.Header().Set("Content-Type", "text/event-stream")
 					if tt.invalidFirst {
 						_, _ = fmt.Fprint(w, "event: endpoint\ndata: /invalid%ZZ\n\n")
@@ -57,7 +69,20 @@ func TestSSETransport_ResolveEndpointAndSend(t *testing.T) {
 			defer server.Close()
 			ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 			defer cancel()
-			transport := NewSSETransport(server.URL + "/nested/sse?original=1")
+			sseURL := server.URL + "/nested/sse?original=1"
+			if tt.redirect {
+				sseURL = server.URL + "/start"
+			}
+			transport := NewSSETransport(sseURL)
+			if tt.missingResponseRequest {
+				transport.HTTPClient = &http.Client{Transport: endpointRoundTripper(func(request *http.Request) (*http.Response, error) {
+					response, err := http.DefaultTransport.RoundTrip(request)
+					if response != nil {
+						response.Request = nil
+					}
+					return response, err
+				})}
+			}
 			failures := make(chan error, 4)
 			transport.OnError(func(err error) {
 				select {

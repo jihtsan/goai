@@ -674,8 +674,12 @@ func (t *SSETransport) Start(ctx context.Context) error {
 		_ = resp.Body.Close()
 		return fmt.Errorf("mcp: expected text/event-stream, got %q", ct)
 	}
+	baseURL := req.URL
+	if resp.Request != nil && resp.Request.URL != nil {
+		baseURL = resp.Request.URL
+	}
 	t.respBody = resp.Body
-	go t.readSSE(bufio.NewReader(resp.Body), req.URL)
+	go t.readSSE(bufio.NewReader(resp.Body), baseURL)
 	return nil
 }
 
